@@ -1,0 +1,15 @@
+{
+  "id": "/",
+  "name": "Callio — Just a voice away",
+  "short_name": "Callio",
+  "description": "Private voice conversations with the people who matter.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0b10",
+  "theme_color": "#0b0b10",
+  "icons": [
+    { "src": "/callio-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
