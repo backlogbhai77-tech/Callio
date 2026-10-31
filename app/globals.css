@@ -140,3 +140,19 @@
     padding: 25px 13px;
   }
 }
+
+/* Callio Phase 3 — live audio call surface */
+.callio-call-backdrop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:20px;background:rgba(5,5,10,.82);backdrop-filter:blur(16px)}
+.callio-call-card{width:min(390px,100%);position:relative;text-align:center;padding:38px 26px 28px;border:1px solid #b49cff3b;border-radius:25px;background:radial-gradient(circle at 50% 0%,#9a78ff24,transparent 48%),#171620;box-shadow:0 30px 100px #000b}
+.callio-call-pulse{width:76px;height:76px;margin:0 auto 21px;border-radius:50%;display:grid;place-items:center;color:#211a35;background:linear-gradient(145deg,#c6b5ff,#8969ed);box-shadow:0 0 0 10px #a88bff12,0 0 50px #9877ff55}
+.callio-call-kicker{font-size:9px;font-weight:800;letter-spacing:1.8px;color:#bca9f5}
+.callio-call-card h2{font:800 27px Manrope;letter-spacing:-1px;margin:12px 0 5px;color:#fff}
+.callio-call-card p{font-size:12px;color:#aaa5b7;margin:0;min-height:19px}
+.callio-call-actions{display:flex;justify-content:center;align-items:center;gap:13px;margin-top:34px}
+.callio-call-actions button{min-width:88px;min-height:67px;border:1px solid #ffffff15;border-radius:15px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:#f5f1ff;background:#ffffff08;font-size:9px;font-weight:700}
+.callio-call-actions button span{font-size:9px}
+.callio-call-actions .callio-reject,.callio-call-actions .callio-hangup{background:#e45e7020;border-color:#e45e7045;color:#ff9eaa}
+.callio-call-actions .callio-accept{background:#79d9a51b;border-color:#79d9a555;color:#9de7b9}
+.callio-call-actions .callio-control.is-on{color:#c7b5ff;border-color:#a88bff55;background:#a88bff18}
+.callio-call-close{position:absolute;right:15px;top:15px;width:32px;height:32px;border-radius:50%;border:1px solid #ffffff18;background:#ffffff08;color:#aaa;display:grid;place-items:center}
+@media(max-width:420px){.callio-call-card{padding:32px 17px 23px}.callio-call-actions{gap:8px}.callio-call-actions button{min-width:78px}}
