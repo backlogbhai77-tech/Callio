@@ -17,6 +17,7 @@ import {
   serverTimestamp, setDoc, updateDoc, where, writeBatch
 } from "firebase/firestore";
 import { auth, db, firebaseConfigured } from "../lib/firebase";
+import CallManager from "../components/CallManager";
 
 const navItems = [
   { id: "home", label: "Home", icon: Home },
@@ -324,8 +325,9 @@ export default function Page() {
     }
   };
 
-  const startCall = () => {
-    setToast("Audio calling is coming in Phase 3. Your friends list is now real.");
+  const startCall = (friend) => {
+    if (!friend?.uid) { setToast("Choose a friend to call."); return; }
+    window.dispatchEvent(new CustomEvent("callio:start-call", { detail: friend }));
   };
 
   const searchUser = async (event) => {
@@ -617,7 +619,7 @@ export default function Page() {
         </div>
 
         {friends.length
-          ? <div className="friend-grid">{friends.slice(0, 3).map((friend) => <FriendCard key={friend.uid} friend={friend} onCall={startCall}/>)}</div>
+          ? <div className="friend-grid">{friends.slice(0, 3).map((friend) => <FriendCard key={friend.uid} friend={friend} onCall={() => startCall(friend)}/>)}</div>
           : <EmptyState icon={Users} title="Your circle is waiting" detail="Add a friend using their unique Callio username. Your real connections will appear here." action="Find a friend" onAction={() => { setActive("friends"); setShowAdd(true); }}/>}
 
         <div className="section-heading history-heading">
@@ -675,12 +677,12 @@ export default function Page() {
           ? <div className="friends-list">{filteredFriends.map((friend) => <div className="friend-row" key={friend.uid}>
               <Avatar person={friend}/>
               <div className="friend-meta"><b>{friend.displayName || "Callio friend"}</b><small>@{friend.username || "username not set"} · Callio member</small></div>
-              <button className="round-call" onClick={startCall} title="Audio calling arrives in Phase 3"><Phone size={17}/></button>
+              <button className="round-call" onClick={() => startCall(friend)} title="Start audio call"><Phone size={17}/></button>
               <button className="icon-btn subtle" onClick={() => removeFriend(friend)} title="Remove friend"><UserX size={18}/></button>
             </div>)}</div>
           : <EmptyState icon={Users} title={search ? "No matching friends" : "No friends yet"} detail={search ? "Try another name or username." : "Search for a friend's username and send your first request."} action={!search ? "Add a friend" : undefined} onAction={() => setShowAdd(true)}/>}
 
-        <div className="info-banner"><Shield size={17}/><span>Only accepted friend requests create a connection. Online presence and audio calls are not part of this phase yet.</span></div>
+        <div className="info-banner"><Shield size={17}/><span>Audio calls connect accepted friends using your microphone. Keep Callio open while a call is active.</span></div>
       </section>}
 
       {active === "history" && <section className="page-content">
@@ -718,8 +720,8 @@ export default function Page() {
         </div>
 
         <div className="settings-card">
-          <div className="setting-line"><div className="setting-symbol"><Mic size={18}/></div><div><b>Audio calling</b><small>Microphone and real-time voice calls are being built next.</small></div><span className="coming-tag">PHASE 3</span></div>
-          <div className="setting-line"><div className="setting-symbol"><Bell size={18}/></div><div><b>Incoming call notifications</b><small>Background call notifications need push and signaling infrastructure.</small></div><span className="coming-tag">LATER</span></div>
+          <div className="setting-line"><div className="setting-symbol"><Mic size={18}/></div><div><b>Audio calling</b><small>Real-time one-to-one voice calls are enabled for friends.</small></div><span className="coming-tag">LIVE</span></div>
+          <div className="setting-line"><div className="setting-symbol"><Bell size={18}/></div><div><b>App installation</b><small>Install Callio from your browser menu. Background push alerts need extra Firebase setup.</small></div><span className="coming-tag">PWA</span></div>
           <div className="setting-line"><div className="setting-symbol"><Shield size={18}/></div><div><b>Privacy & safety</b><small>Account and call access controls.</small></div><span className="coming-tag">PHASE 5</span></div>
         </div>
 
@@ -728,7 +730,7 @@ export default function Page() {
 
       {dataError && <div className="info-banner" style={{ margin: "0 48px 18px", borderColor: "#e58c9c55" }}><Shield size={17}/><span>Database notice: {dataError}</span></div>}
 
-      <footer className="app-footer"><span>© 2026 CALLIO</span><span>MADE FOR THE PEOPLE WHO MATTER <Heart size={12}/></span><span>PHASE 2</span></footer>
+      <footer className="app-footer"><span>© 2026 CALLIO</span><span>MADE FOR THE PEOPLE WHO MATTER <Heart size={12}/></span><span>PHASE 3</span></footer>
     </main>
 
     <AnimatePresence>
@@ -762,6 +764,7 @@ export default function Page() {
       </motion.div>}
     </AnimatePresence>
 
+    <CallManager user={user} onToast={setToast}/>
     {toast && <div className="toast"><Check size={16}/>{toast}</div>}
   </div>;
 }
@@ -780,6 +783,6 @@ function FriendCard({ friend, onCall }) {
     <div className="friend-card-top"><Avatar person={friend} size="lg"/><span className="member-tag">CALLIO MEMBER</span></div>
     <b>{friend.displayName || "Callio friend"}</b>
     <small>@{friend.username || "member"}</small>
-    <div className="friend-card-bottom"><span>Connected friend</span><button className="round-call" onClick={onCall} title="Audio calling arrives in Phase 3"><Phone size={17}/></button></div>
+    <div className="friend-card-bottom"><span>Connected friend</span><button className="round-call" onClick={onCall} title="Start audio call"><Phone size={17}/></button></div>
   </div>;
 }
