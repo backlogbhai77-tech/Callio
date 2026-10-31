@@ -1,0 +1,38 @@
+PHASE 3 FIRESTORE RULES — ADD THIS INSIDE YOUR EXISTING
+match /databases/{database}/documents { ... }
+Do NOT replace your existing Phase 2 rules. Add this match block before the final closing braces.
+
+match /calls/{callId} {
+  function isParticipant() {
+    return request.auth != null &&
+      (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.calleeId);
+  }
+  function isFriendCall() {
+    return request.auth != null &&
+      request.resource.data.callerId == request.auth.uid &&
+      request.resource.data.calleeId is string &&
+      request.resource.data.calleeId != request.auth.uid &&
+      request.resource.data.friendshipId is string &&
+      exists(/databases/$(database)/documents/friendships/$(request.resource.data.friendshipId)) &&
+      get(/databases/$(database)/documents/friendships/$(request.resource.data.friendshipId)).data.memberUids.hasAll([request.auth.uid, request.resource.data.calleeId]);
+  }
+  allow create: if isFriendCall();
+  allow read: if isParticipant();
+  allow update: if isParticipant() &&
+    request.resource.data.callerId == resource.data.callerId &&
+    request.resource.data.calleeId == resource.data.calleeId;
+  allow delete: if false;
+
+  match /callerCandidates/{candidateId} {
+    allow read, write: if request.auth != null &&
+      (request.auth.uid == get(/databases/$(database)/documents/calls/$(callId)).data.callerId ||
+       request.auth.uid == get(/databases/$(database)/documents/calls/$(callId)).data.calleeId);
+  }
+  match /calleeCandidates/{candidateId} {
+    allow read, write: if request.auth != null &&
+      (request.auth.uid == get(/databases/$(database)/documents/calls/$(callId)).data.callerId ||
+       request.auth.uid == get(/databases/$(database)/documents/calls/$(callId)).data.calleeId);
+  }
+}
+
+Important: keep your existing users, usernames, friendRequests and friendships rules unchanged. Test with two separate Callio accounts. This is a starter rule block; before a public launch, tighten allowed call fields/status transitions and add rate limiting/abuse controls.
