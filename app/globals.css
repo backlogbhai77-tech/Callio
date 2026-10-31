@@ -8,3 +8,135 @@
 @media(max-width:1000px){.sidebar{width:215px}.main-area{margin-left:215px;width:calc(100% - 215px)}.page-content{padding:38px 30px}.topbar{padding:0 30px}.hero-art{right:0;opacity:.8}.hero-copy{max-width:390px}}
 @media(max-width:760px){.sidebar{width:68px;padding:20px 9px}.sidebar .brand{padding:0;justify-content:center;margin-bottom:40px}.brand>div:last-child,.side-label,.nav-item span,.nav-count,.sidebar-note,.user-mini span,.user-mini>svg{display:none}.nav-item{justify-content:center;padding:13px 0}.user-mini{justify-content:center;padding:8px}.main-area{margin-left:68px;width:calc(100% - 68px)}.topbar{height:62px;padding:0 17px}.page-content{padding:29px 17px}.welcome-row{align-items:flex-start}.welcome-row h1{font-size:31px}.welcome-row>.primary-btn{padding:10px 11px;font-size:10px}.hero-card{padding:26px 23px;min-height:250px}.hero-copy{max-width:75%}.hero-copy h2{font-size:24px}.hero-art{right:-90px;opacity:.32}.friend-grid{grid-template-columns:1fr 1fr}.friend-card:last-child{display:none}.app-footer{padding:15px 17px;gap:10px;font-size:7px}.app-footer span:nth-child(2){display:none}.call-duration{display:none}.auth-shell{grid-template-columns:1fr}.auth-left{display:none}.auth-right{min-height:100vh;padding:28px}.mobile-brand{display:block}.auth-card{max-width:420px}.auth-legal{margin-top:35px}}
 @media(max-width:480px){.secure-pill{display:none}.welcome-row{gap:8px}.welcome-row>.primary-btn{white-space:nowrap}.friend-grid{grid-template-columns:1fr 1fr;gap:9px}.friend-card{padding:13px}.friend-row{gap:9px;padding:12px 10px}.friend-row .presence-label{display:none}.friend-meta b{font-size:10px}.friend-meta small{font-size:8px}.round-call{width:30px;height:30px}.history-stats{grid-template-columns:1fr}.history-stats>div{padding:13px}.field-grid{grid-template-columns:1fr}.setting-line small{max-width:190px}.coming-tag{font-size:7px}.breadcrumb{font-size:8px}.top-actions{gap:8px}.hero-copy{max-width:100%}.hero-art{opacity:.15}.history-list .call-row{gap:8px;padding:10px}.call-kind{min-width:70px;font-size:8px}.call-kind span{display:none}}
+
+/* Callio Phase 2 — Friends UI */
+
+.callio-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 9px;
+  padding: 32px 18px;
+  border: 1px dashed #a88bff30;
+  background: #a88bff06;
+  border-radius: 14px;
+  min-height: 170px;
+}
+
+.callio-empty .empty-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  background: #a88bff16;
+  color: #c1adff;
+  display: grid;
+  place-items: center;
+}
+
+.callio-empty > b {
+  font: 700 13px Manrope;
+  color: #f3efff;
+}
+
+.callio-empty > p {
+  max-width: 340px;
+  margin: 0;
+  color: #9692a2;
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.request-accept {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #79d9a455;
+  background: #79d9a414;
+  color: #9be2b5;
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.search-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  margin-top: 16px;
+  border: 1px solid #a88bff35;
+  background: #a88bff0b;
+  border-radius: 12px;
+}
+
+.search-result .friend-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.relation-tag,
+.member-tag {
+  font-size: 8px;
+  letter-spacing: .8px;
+  color: #b9a6ef;
+  border: 1px solid #a88bff35;
+  padding: 6px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.member-tag {
+  color: #a99abf;
+  background: #a88bff09;
+}
+
+.friend-card-top .member-tag {
+  margin-left: auto;
+}
+
+.modal-card form {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.modal-card form .primary-btn {
+  margin-top: 0;
+}
+
+.modal-card form label {
+  display: grid;
+  gap: 8px;
+  font-size: 10px;
+  color: #aaa6b4;
+}
+
+.modal-card .info-banner {
+  margin-top: 16px;
+}
+
+@media(max-width:480px) {
+  .request-accept {
+    padding: 7px 8px;
+    font-size: 9px;
+  }
+
+  .search-result {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .relation-tag,
+  .member-tag {
+    font-size: 7px;
+    padding: 5px 6px;
+  }
+
+  .callio-empty {
+    padding: 25px 13px;
+  }
+}
