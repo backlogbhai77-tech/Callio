@@ -34,6 +34,44 @@ export default function CallManager({ user, onToast }) {
   const startedAt = useRef(null);
   const finishedRef = useRef(false);
   const ringTimerRef = useRef(null);
+  const ringtoneRef = useRef({ context: null, timer: null });
+
+  // A short synthesized tone avoids bundling copyrighted audio. Mobile browsers may
+  // block sound until the user has interacted with the app at least once.
+  useEffect(() => {
+    if (!incoming || call || document.visibilityState !== "visible") return;
+    let stopped = false;
+    let context;
+    const playTone = async () => {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass || stopped) return;
+        context = ringtoneRef.current.context || new AudioContextClass();
+        ringtoneRef.current.context = context;
+        if (context.state === "suspended") await context.resume();
+        if (stopped) return;
+        const now = context.currentTime;
+        [0, 0.42].forEach((offset) => {
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          oscillator.type = "sine";
+          oscillator.frequency.setValueAtTime(660, now + offset);
+          gain.gain.setValueAtTime(0.0001, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.12, now + offset + 0.025);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.24);
+          oscillator.connect(gain); gain.connect(context.destination);
+          oscillator.start(now + offset); oscillator.stop(now + offset + 0.26);
+        });
+      } catch (error) { console.warn("Callio ringtone unavailable", error); }
+    };
+    playTone();
+    ringtoneRef.current.timer = setInterval(playTone, 1900);
+    return () => {
+      stopped = true;
+      if (ringtoneRef.current.timer) clearInterval(ringtoneRef.current.timer);
+      ringtoneRef.current.timer = null;
+    };
+  }, [incoming, call]);
 
   const stopMedia = useCallback(() => {
     candidateStops.current.forEach((stop) => stop());
@@ -155,14 +193,30 @@ export default function CallManager({ user, onToast }) {
       // foreground Firestore calling still works as before.
       try {
         const idToken = await user.getIdToken();
-        fetch("/api/calls/notify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-          body: JSON.stringify({ callId: callDoc.id })
-        }).then(async (response) => {
-          if (!response.ok) { const result = await response.json().catch(() => ({})); console.warn("Callio push notification was not sent", result.error || response.status); }
-        }).catch((error) => console.warn("Callio push notification request failed", error));
-      } catch (error) { console.warn("Could not authenticate push request", error); }
+        const controller = new AbortController();
+        const pushTimeout = setTimeout(() => controller.abort(), 8000);
+        let response;
+        try {
+          response = await fetch("/api/calls/notify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+            body: JSON.stringify({ callId: callDoc.id }),
+            signal: controller.signal
+          });
+        } finally { clearTimeout(pushTimeout); }
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          console.warn("Callio push notification was not sent", result.error || response.status);
+          onToast?.(`Call placed, but push alert failed: ${result.error || "server setup error"}`);
+        } else if (!result.sent) {
+          onToast?.("Calling… friend may not have notifications enabled on their device.");
+        } else {
+          onToast?.("Calling… push alert sent to the friend’s registered device.");
+        }
+      } catch (error) {
+        console.warn("Callio push notification request failed", error);
+        onToast?.("Call placed, but notification server could not be reached.");
+      }
       ringTimerRef.current = setTimeout(() => {
         if (callRef.current?.id === callDoc.id && callRef.current?.status === "ringing") finishCall("missed");
       }, 40000);
@@ -278,7 +332,7 @@ export default function CallManager({ user, onToast }) {
       <button className="callio-call-close" onClick={() => finishCall("ended")} aria-label="End call"><X size={18}/></button>
       <div className="callio-call-pulse"><Radio size={25}/></div><span className="callio-call-kicker">{call.status === "connected" ? "CALL CONNECTED" : "CALLING"}</span>
       <h2>{call.person?.displayName || "Callio friend"}</h2><p>{call.status === "connected" ? time : "Waiting for answer…"}</p>
-      <div className="callio-call-actions"><button className={muted ? "callio-control is-on" : "callio-control"} onClick={toggleMute}>{muted ? <MicOff size={20}/> : <Mic size={20}/>}<span>{muted ? "Unmute" : "Mute"}</span></button><button className="callio-hangup" onClick={() => finishCall("ended")}><PhoneOff size={20}/><span>End call</span></button><button className={speaker ? "callio-control is-on" : "callio-control"} onClick={() => { setSpeaker(!speaker); if (audioRef.current) audioRef.current.muted = !speaker; }}><Volume2 size={20}/><span>Speaker</span></button></div>
+      <div className="callio-call-actions"><button className={muted ? "callio-control is-on" : "callio-control"} onClick={toggleMute}>{muted ? <MicOff size={20}/> : <Mic size={20}/>}<span>{muted ? "Unmute" : "Mute"}</span></button><button className="callio-hangup" onClick={() => finishCall("ended")}><PhoneOff size={20}/><span>End call</span></button><button className={speaker ? "callio-control is-on" : "callio-control"} onClick={() => { const next = !speaker; setSpeaker(next); if (audioRef.current) audioRef.current.muted = !next; }}><Volume2 size={20}/><span>{speaker ? "Audio on" : "Audio off"}</span></button></div>
     </div></div>}
   </>;
 }
