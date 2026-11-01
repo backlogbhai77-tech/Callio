@@ -53,3 +53,7 @@ This starter rule allows any authenticated user to read user profiles; refine it
 - Call buttons currently explain that calling is not enabled until Phase 3.
 - Firebase credentials are not included in this ZIP. Never commit `.env.local`.
 - Browser push notifications do not guarantee background call answering on every device/browser. Reliable incoming-call behavior needs service-worker push, an always-available signaling backend, TURN, and platform-specific testing.
+
+
+## Phase 4
+See `PHASE-4-SETUP.md` for Firebase Web Push/VAPID and Firebase Admin setup. Add `FIRESTORE_PHASE4_RULES.txt` to the existing rules without removing Phase 2/3 permissions. Background notifications require Vercel server environment variables and a device opt-in in Callio Settings.
