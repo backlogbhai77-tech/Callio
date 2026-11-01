@@ -1,0 +1,18 @@
+PHASE 4 FIRESTORE RULES ADDITION
+
+Keep all your currently published Phase 2/Phase 3 rules. Do NOT replace them.
+Inside the existing match /databases/{database}/documents { ... } block, add this new match block before its final closing brace:
+
+    match /users/{userId}/devices/{deviceId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['token', 'platform', 'createdAt', 'updatedAt'])
+        && request.resource.data.token is string
+        && request.resource.data.token.size() > 20;
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+This permits each signed-in user to register and remove their own browser/device token only. Other users cannot read device tokens. The server uses Firebase Admin SDK and bypasses Firestore rules after validating the caller and accepted friendship.
+
+Do not add a public read rule for device tokens or calls. Never put the Firebase Admin private key in NEXT_PUBLIC variables or GitHub.
