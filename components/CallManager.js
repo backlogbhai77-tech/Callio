@@ -33,6 +33,7 @@ export default function CallManager({ user, onToast }) {
   const candidateStops = useRef([]);
   const startedAt = useRef(null);
   const finishedRef = useRef(false);
+  const ringTimerRef = useRef(null);
 
   const stopMedia = useCallback(() => {
     candidateStops.current.forEach((stop) => stop());
@@ -52,6 +53,7 @@ export default function CallManager({ user, onToast }) {
 
   const finishCall = useCallback(async (status = "ended") => {
     const activeCall = callRef.current;
+    if (ringTimerRef.current) { clearTimeout(ringTimerRef.current); ringTimerRef.current = null; }
     if (finishedRef.current) return;
     finishedRef.current = true;
     stopMedia();
@@ -149,6 +151,21 @@ export default function CallManager({ user, onToast }) {
       await peer.setLocalDescription(offer);
       callRef.current = { id: callDoc.id, role: "caller", person: friend, status: "ringing" };
       setCall(callRef.current);
+      // Notify the callee's registered devices. If server push is not configured,
+      // foreground Firestore calling still works as before.
+      try {
+        const idToken = await user.getIdToken();
+        fetch("/api/calls/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ callId: callDoc.id })
+        }).then(async (response) => {
+          if (!response.ok) { const result = await response.json().catch(() => ({})); console.warn("Callio push notification was not sent", result.error || response.status); }
+        }).catch((error) => console.warn("Callio push notification request failed", error));
+      } catch (error) { console.warn("Could not authenticate push request", error); }
+      ringTimerRef.current = setTimeout(() => {
+        if (callRef.current?.id === callDoc.id && callRef.current?.status === "ringing") finishCall("missed");
+      }, 40000);
       const stopAnswer = onSnapshot(doc(db, "calls", callDoc.id), async (snapshot) => {
         const data = snapshot.data();
         if (!data) return;
@@ -159,6 +176,7 @@ export default function CallManager({ user, onToast }) {
           return;
         }
         if (data.answer && !peer.currentRemoteDescription && !peer.remoteDescription) {
+          if (ringTimerRef.current) { clearTimeout(ringTimerRef.current); ringTimerRef.current = null; }
           try {
             await peer.setRemoteDescription(new RTCSessionDescription(data.answer));
             startedAt.current = Date.now();
@@ -197,6 +215,13 @@ export default function CallManager({ user, onToast }) {
       setCall(callRef.current);
       setIncoming(null);
       startedAt.current = Date.now();
+      const stopCallStatus = onSnapshot(doc(db, "calls", incoming.id), (snapshot) => {
+        const data = snapshot.data();
+        if (data && ["ended", "missed", "rejected", "failed"].includes(data.status) && callRef.current?.id === incoming.id) {
+          finishCall(data.status);
+        }
+      }, (error) => console.warn("Call status listener", error));
+      candidateStops.current.push(stopCallStatus);
       attachCandidateListener(incoming.id, "callerCandidates", peer);
     } catch (error) {
       stopMedia();
