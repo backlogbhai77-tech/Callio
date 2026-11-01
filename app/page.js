@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 import { auth, db, firebaseConfigured } from "../lib/firebase";
 import CallManager from "../components/CallManager";
+import NotificationSetup from "../components/NotificationSetup";
 
 const navItems = [
   { id: "home", label: "Home", icon: Home },
@@ -173,6 +174,7 @@ export default function Page() {
   const [friends, setFriends] = useState([]);
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
+  const [callHistory, setCallHistory] = useState([]);
   const [active, setActive] = useState("home");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState("");
@@ -201,6 +203,7 @@ export default function Page() {
       setFriends([]);
       setIncoming([]);
       setOutgoing([]);
+      setCallHistory([]);
       return;
     }
 
@@ -290,11 +293,28 @@ export default function Page() {
       (error) => setDataError(error.message)
     );
 
+    const historyById = new Map();
+    const publishHistory = () => setCallHistory([...historyById.values()].sort((a, b) => {
+      const aTime = a.createdAt?.toMillis?.() || 0;
+      const bTime = b.createdAt?.toMillis?.() || 0;
+      return bTime - aTime;
+    }));
+    const stopCallerHistory = onSnapshot(query(collection(db, "calls"), where("callerId", "==", user.uid)), (snap) => {
+      snap.docs.forEach((item) => historyById.set(item.id, { id: item.id, ...item.data() }));
+      publishHistory();
+    }, (error) => setDataError(error.message));
+    const stopCalleeHistory = onSnapshot(query(collection(db, "calls"), where("calleeId", "==", user.uid)), (snap) => {
+      snap.docs.forEach((item) => historyById.set(item.id, { id: item.id, ...item.data() }));
+      publishHistory();
+    }, (error) => setDataError(error.message));
+
     return () => {
       stopProfile();
       stopFriends();
       stopIncoming();
       stopOutgoing();
+      stopCallerHistory();
+      stopCalleeHistory();
     };
   }, [user]);
 
@@ -310,6 +330,8 @@ export default function Page() {
   const filteredFriends = useMemo(() => friends.filter((friend) =>
     `${friend.displayName || ""} @${friend.username || ""}`.toLowerCase().includes(search.toLowerCase())
   ), [friends, search]);
+  const totalCallMinutes = Math.floor(callHistory.reduce((sum, item) => sum + (Number(item.durationSeconds) || 0), 0) / 60);
+  const missedCalls = callHistory.filter((item) => item.status === "missed").length;
 
   if (user === undefined) {
     return <div className="loading-screen"><Brand/><span className="spinner"/></div>;
@@ -690,13 +712,25 @@ export default function Page() {
           <div><div className="eyebrow">THE GOOD OLD CHATS</div><h1>Call history<span className="wave">✳</span></h1><p className="muted">Every hello will leave a little echo.</p></div>
         </div>
         <div className="history-stats">
-          <div><span>TOTAL CALLS</span><b>0</b><small>No calls recorded yet</small></div>
-          <div><span>TIME TOGETHER</span><b>0 min</b><small>Your shared moments</small></div>
-          <div><span>MISSED CALLS</span><b>0</b><small>No missed calls</small></div>
+          <div><span>TOTAL CALLS</span><b>{callHistory.length}</b><small>Calls on this account</small></div>
+          <div><span>TIME TOGETHER</span><b>{totalCallMinutes} min</b><small>Connected call time</small></div>
+          <div><span>MISSED CALLS</span><b>{missedCalls}</b><small>Calls you did not answer</small></div>
         </div>
-        <EmptyState icon={Clock3} title="No calls yet" detail="Your real call history will appear here after audio calling launches in Phase 3."/>
+        {callHistory.length ? <div className="history-list large">{callHistory.map((item) => {
+          const outgoingCall = item.callerId === user.uid;
+          const personName = outgoingCall ? (item.calleeName || "Callio friend") : (item.callerName || "Callio friend");
+          const kind = item.status === "missed" ? "missed" : outgoingCall ? "outgoing" : "incoming";
+          const date = item.createdAt?.toDate ? item.createdAt.toDate().toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "Just now";
+          const duration = Number(item.durationSeconds) || 0;
+          const durationText = duration ? `${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, "0")}` : item.status === "ringing" ? "Ringing" : "—";
+          return <div className="call-row" key={item.id}>
+            <Avatar person={{ displayName: personName, uid: outgoingCall ? item.calleeId : item.callerId }}/>
+            <div className="call-person"><b>{personName}</b><small>{date}</small></div>
+            <div className={`call-kind ${kind}`}><Phone size={13}/><span>{item.status === "missed" ? "Missed" : outgoingCall ? "Outgoing" : "Incoming"}</span></div>
+            <div className="call-duration">{durationText}</div>
+          </div>;
+        })}</div> : <EmptyState icon={Clock3} title="No calls yet" detail="Your incoming, outgoing and missed calls will appear here."/>}
       </section>}
-
       {active === "settings" && <section className="page-content">
         <div className="welcome-row">
           <div><div className="eyebrow">MAKE YOURSELF AT HOME</div><h1>Settings<span className="wave">✳</span></h1><p className="muted">Your profile helps friends find you.</p></div>
@@ -721,8 +755,10 @@ export default function Page() {
 
         <div className="settings-card">
           <div className="setting-line"><div className="setting-symbol"><Mic size={18}/></div><div><b>Audio calling</b><small>Real-time one-to-one voice calls are enabled for friends.</small></div><span className="coming-tag">LIVE</span></div>
-          <div className="setting-line"><div className="setting-symbol"><Bell size={18}/></div><div><b>App installation</b><small>Install Callio from your browser menu. Background push alerts need extra Firebase setup.</small></div><span className="coming-tag">PWA</span></div>
-          <div className="setting-line"><div className="setting-symbol"><Shield size={18}/></div><div><b>Privacy & safety</b><small>Account and call access controls.</small></div><span className="coming-tag">PHASE 5</span></div>
+          <div className="setting-line"><div className="setting-symbol"><Bell size={18}/></div><div><b>Background call alerts</b><small>Allow this device to receive incoming-call notifications.</small></div><span className="coming-tag">PHASE 4</span></div>
+          <div style={{ paddingTop: 16 }}><NotificationSetup user={user} onToast={setToast}/></div>
+          <p className="muted" style={{ marginTop: 10 }}>Enable this separately on every phone that should receive call alerts.</p>
+          <div className="setting-line"><div className="setting-symbol"><Shield size={18}/></div><div><b>Privacy & safety</b><small>Account and call access controls.</small></div><span className="coming-tag">NEXT</span></div>
         </div>
 
         <button className="logout-btn" onClick={signOutUser}><LogOut size={17}/> Sign out of Callio</button>
@@ -730,7 +766,7 @@ export default function Page() {
 
       {dataError && <div className="info-banner" style={{ margin: "0 48px 18px", borderColor: "#e58c9c55" }}><Shield size={17}/><span>Database notice: {dataError}</span></div>}
 
-      <footer className="app-footer"><span>© 2026 CALLIO</span><span>MADE FOR THE PEOPLE WHO MATTER <Heart size={12}/></span><span>PHASE 3</span></footer>
+      <footer className="app-footer"><span>© 2026 CALLIO</span><span>MADE FOR THE PEOPLE WHO MATTER <Heart size={12}/></span><span>PHASE 4</span></footer>
     </main>
 
     <AnimatePresence>
