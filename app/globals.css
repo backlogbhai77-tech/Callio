@@ -156,3 +156,11 @@
 .callio-call-actions .callio-control.is-on{color:#c7b5ff;border-color:#a88bff55;background:#a88bff18}
 .callio-call-close{position:absolute;right:15px;top:15px;width:32px;height:32px;border-radius:50%;border:1px solid #ffffff18;background:#ffffff08;color:#aaa;display:grid;place-items:center}
 @media(max-width:420px){.callio-call-card{padding:32px 17px 23px}.callio-call-actions{gap:8px}.callio-call-actions button{min-width:78px}}
+
+
+/* Phase 4.1 notification diagnostics */
+.callio-notification-setup { display: grid; gap: 10px; justify-items: start; }
+.callio-notification-status { display: flex; align-items: flex-start; gap: 8px; color: #8b91a0; font-size: 12px; line-height: 1.5; max-width: 560px; }
+.callio-notification-status.enabled { color: #2c9b70; }
+.callio-notification-status.error, .callio-notification-status.unsupported { color: #d97757; }
+.callio-notification-status svg { flex: 0 0 auto; margin-top: 1px; }
