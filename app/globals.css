@@ -164,3 +164,9 @@
 .callio-notification-status.enabled { color: #2c9b70; }
 .callio-notification-status.error, .callio-notification-status.unsupported { color: #d97757; }
 .callio-notification-status svg { flex: 0 0 auto; margin-top: 1px; }
+
+/* Integrated call controls: volume is remote playback level, not hardware routing. */
+.callio-volume-control{display:flex;align-items:center;gap:12px;margin:22px auto 0;max-width:290px;color:#c9c3d6;font-size:11px}
+.callio-volume-control input{flex:1;min-width:80px;accent-color:#b49cff}
+.callio-volume-control span:last-child{min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
+.callio-call-actions button:disabled{opacity:.55;cursor:not-allowed}
