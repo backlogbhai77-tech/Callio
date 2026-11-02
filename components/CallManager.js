@@ -23,7 +23,8 @@ export default function CallManager({ user, onToast }) {
   const [call, setCall] = useState(null);
   const [incoming, setIncoming] = useState(null);
   const [muted, setMuted] = useState(false);
-  const [speaker, setSpeaker] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [outputVolume, setOutputVolume] = useState(85);
   const [seconds, setSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
   const peerRef = useRef(null);
@@ -34,44 +35,49 @@ export default function CallManager({ user, onToast }) {
   const startedAt = useRef(null);
   const finishedRef = useRef(false);
   const ringTimerRef = useRef(null);
-  const ringtoneRef = useRef({ context: null, timer: null });
+  const ringtoneAudioRef = useRef(null);
+  const audioUnlockedRef = useRef(false);
 
-  // A short synthesized tone avoids bundling copyrighted audio. Mobile browsers may
-  // block sound until the user has interacted with the app at least once.
+  // Unlock the ringtone element during the user's first gesture. Mobile browsers
+  // commonly block autoplay until a real tap/key interaction has happened.
   useEffect(() => {
-    if (!incoming || call || document.visibilityState !== "visible") return;
-    let stopped = false;
-    let context;
-    const playTone = async () => {
-      try {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContextClass || stopped) return;
-        context = ringtoneRef.current.context || new AudioContextClass();
-        ringtoneRef.current.context = context;
-        if (context.state === "suspended") await context.resume();
-        if (stopped) return;
-        const now = context.currentTime;
-        [0, 0.42].forEach((offset) => {
-          const oscillator = context.createOscillator();
-          const gain = context.createGain();
-          oscillator.type = "sine";
-          oscillator.frequency.setValueAtTime(660, now + offset);
-          gain.gain.setValueAtTime(0.0001, now + offset);
-          gain.gain.exponentialRampToValueAtTime(0.12, now + offset + 0.025);
-          gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.24);
-          oscillator.connect(gain); gain.connect(context.destination);
-          oscillator.start(now + offset); oscillator.stop(now + offset + 0.26);
-        });
-      } catch (error) { console.warn("Callio ringtone unavailable", error); }
+    const unlock = () => {
+      if (audioUnlockedRef.current || !ringtoneAudioRef.current) return;
+      const ringtone = ringtoneAudioRef.current;
+      const wasMuted = ringtone.muted;
+      ringtone.muted = true;
+      ringtone.play().then(() => {
+        ringtone.pause();
+        ringtone.currentTime = 0;
+        ringtone.muted = wasMuted;
+        audioUnlockedRef.current = true;
+      }).catch((error) => console.warn("Callio audio unlock was blocked", error));
     };
-    playTone();
-    ringtoneRef.current.timer = setInterval(playTone, 1900);
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
     return () => {
-      stopped = true;
-      if (ringtoneRef.current.timer) clearInterval(ringtoneRef.current.timer);
-      ringtoneRef.current.timer = null;
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
     };
-  }, [incoming, call]);
+  }, []);
+
+  useEffect(() => {
+    const ringtone = ringtoneAudioRef.current;
+    if (!ringtone) return;
+    if (incoming && !call && document.visibilityState === "visible") {
+      ringtone.currentTime = 0;
+      ringtone.volume = 0.72;
+      ringtone.loop = true;
+      ringtone.play().catch((error) => {
+        console.warn("Callio ringtone playback was blocked", error);
+        onToast?.("Incoming call detected. Tap the screen once to enable call sound.");
+      });
+    } else {
+      ringtone.pause();
+      ringtone.currentTime = 0;
+    }
+    return () => { ringtone.pause(); ringtone.currentTime = 0; };
+  }, [incoming, call, onToast]);
 
   const stopMedia = useCallback(() => {
     candidateStops.current.forEach((stop) => stop());
@@ -87,6 +93,7 @@ export default function CallManager({ user, onToast }) {
       streamRef.current = null;
     }
     if (audioRef.current) audioRef.current.srcObject = null;
+    if (ringtoneAudioRef.current) { ringtoneAudioRef.current.pause(); ringtoneAudioRef.current.currentTime = 0; }
   }, []);
 
   const finishCall = useCallback(async (status = "ended") => {
@@ -98,6 +105,8 @@ export default function CallManager({ user, onToast }) {
     setCall(null);
     setIncoming(null);
     setMuted(false);
+    setSoundEnabled(true);
+    setOutputVolume(85);
     setSeconds(0);
     callRef.current = null;
     if (activeCall?.id && db) {
@@ -147,7 +156,9 @@ export default function CallManager({ user, onToast }) {
     peer.ontrack = (event) => {
       if (audioRef.current) {
         audioRef.current.srcObject = event.streams[0];
-        audioRef.current.play().catch(() => onToast?.("Tap the speaker control to enable audio playback."));
+        audioRef.current.muted = !soundEnabled;
+        audioRef.current.volume = outputVolume / 100;
+        audioRef.current.play().catch(() => onToast?.("Tap Sound on in the call controls to enable audio playback."));
       }
     };
     peer.onicecandidate = async (event) => {
@@ -161,7 +172,7 @@ export default function CallManager({ user, onToast }) {
       if (["failed", "closed"].includes(peer.connectionState)) finishCall("failed");
     };
     return peer;
-  }, [finishCall, onToast]);
+  }, [finishCall, onToast, outputVolume, soundEnabled]);
 
   const startCall = useCallback(async (friend) => {
     if (!friend?.uid || !db || busy || callRef.current) return;
@@ -314,6 +325,16 @@ export default function CallManager({ user, onToast }) {
 
   useEffect(() => () => { stopMedia(); }, [stopMedia]);
 
+  const toggleSound = () => {
+    const next = !soundEnabled;
+    if (audioRef.current) audioRef.current.muted = !next;
+    setSoundEnabled(next);
+  };
+  const changeVolume = (value) => {
+    const next = Math.max(0, Math.min(100, Number(value)));
+    setOutputVolume(next);
+    if (audioRef.current) { audioRef.current.volume = next / 100; audioRef.current.muted = next === 0 || !soundEnabled; }
+  };
   const toggleMute = () => {
     const next = !muted;
     streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = !next; });
@@ -323,6 +344,7 @@ export default function CallManager({ user, onToast }) {
 
   return <>
     <audio ref={audioRef} autoPlay playsInline />
+    <audio ref={ringtoneAudioRef} src="/sounds/callio-ringtone.wav" preload="auto" loop />
     {incoming && !call && <div className="callio-call-backdrop"><div className="callio-call-card">
       <div className="callio-call-pulse"><Phone size={25}/></div><span className="callio-call-kicker">INCOMING AUDIO CALL</span>
       <h2>{incoming.callerName || "Callio friend"}</h2><p>is calling you</p>
@@ -332,7 +354,8 @@ export default function CallManager({ user, onToast }) {
       <button className="callio-call-close" onClick={() => finishCall("ended")} aria-label="End call"><X size={18}/></button>
       <div className="callio-call-pulse"><Radio size={25}/></div><span className="callio-call-kicker">{call.status === "connected" ? "CALL CONNECTED" : "CALLING"}</span>
       <h2>{call.person?.displayName || "Callio friend"}</h2><p>{call.status === "connected" ? time : "Waiting for answer…"}</p>
-      <div className="callio-call-actions"><button className={muted ? "callio-control is-on" : "callio-control"} onClick={toggleMute}>{muted ? <MicOff size={20}/> : <Mic size={20}/>}<span>{muted ? "Unmute" : "Mute"}</span></button><button className="callio-hangup" onClick={() => finishCall("ended")}><PhoneOff size={20}/><span>End call</span></button><button className={speaker ? "callio-control is-on" : "callio-control"} onClick={() => { const next = !speaker; setSpeaker(next); if (audioRef.current) audioRef.current.muted = !next; }}><Volume2 size={20}/><span>{speaker ? "Audio on" : "Audio off"}</span></button></div>
+      <div className="callio-call-actions"><button className={muted ? "callio-control is-on" : "callio-control"} onClick={toggleMute}>{muted ? <MicOff size={20}/> : <Mic size={20}/>}<span>{muted ? "Unmute" : "Mute"}</span></button><button className="callio-hangup" onClick={() => finishCall("ended")}><PhoneOff size={20}/><span>End call</span></button><button className={soundEnabled ? "callio-control is-on" : "callio-control"} onClick={toggleSound}>{soundEnabled ? <Volume2 size={20}/> : <VolumeX size={20}/>}<span>{soundEnabled ? "Sound on" : "Sound off"}</span></button></div>
+      <label className="callio-volume-control"><span>Call volume</span><input aria-label="Call volume" type="range" min="0" max="100" value={outputVolume} onChange={(event) => changeVolume(event.target.value)}/><span>{outputVolume}%</span></label>
     </div></div>}
   </>;
 }
