@@ -1,4 +1,4 @@
-const CACHE_NAME = "callio-shell-v4";
+const CACHE_NAME = "callio-shell-v5";
 self.addEventListener("install", (event) => {
   self.skipWaiting();
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(["/", "/manifest.webmanifest", "/callio-icon.svg"])));
@@ -22,13 +22,14 @@ self.addEventListener("push", (event) => {
   const title = payload.title || data.title || payload.notification?.title || "Incoming Call — Callio";
   const options = {
     body: payload.body || data.body || payload.notification?.body || "Open Callio to answer your call.",
-    icon: "/callio-icon.svg",
-    badge: "/callio-icon.svg",
-    tag: payload.tag || "callio-incoming-call",
+    icon: "/callio-icon-192.png",
+    badge: "/callio-icon-192.png",
+    tag: payload.tag || (data.callId ? `callio-call-${data.callId}` : "callio-incoming-call"),
     renotify: true,
     requireInteraction: true,
     data: { url: payload.url || data.url || (data.callId ? `/?call=${encodeURIComponent(data.callId)}` : "/"), callId: data.callId || payload.callId || "" },
-    vibrate: [250, 150, 250, 150, 400]
+    vibrate: [250, 150, 250, 150, 400],
+    actions: [{ action: "open", title: "Open Callio" }]
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
