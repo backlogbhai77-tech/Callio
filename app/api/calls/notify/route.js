@@ -40,7 +40,7 @@ export async function POST(request) {
         callId,
         url: `/?call=${encodeURIComponent(callId)}`
       },
-      webpush: { headers: { Urgency: "high", TTL: "45" } }
+      webpush: { headers: { Urgency: "high", TTL: "45" }, fcmOptions: { link: `${process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://callio.vercel.app")}/?call=${encodeURIComponent(callId)}` } }
     });
     const invalid = [];
     response.responses.forEach((result, index) => {
