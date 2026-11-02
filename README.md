@@ -55,5 +55,10 @@ This starter rule allows any authenticated user to read user profiles; refine it
 - Browser push notifications do not guarantee background call answering on every device/browser. Reliable incoming-call behavior needs service-worker push, an always-available signaling backend, TURN, and platform-specific testing.
 
 
-## Phase 4
-See `PHASE-4-SETUP.md` for Firebase Web Push/VAPID and Firebase Admin setup. Add `FIRESTORE_PHASE4_RULES.txt` to the existing rules without removing Phase 2/3 permissions. Background notifications require Vercel server environment variables and a device opt-in in Callio Settings.
+## Complete PWA upgrade (November 2026)
+See `COMPLETE-UPGRADE-NOTES.md` for the upgrade summary and two-device deployment checklist. The service worker supports background push notifications with notification actions where the browser supports them, plus a cached offline fallback. TURN configuration accepts one URL or a comma-separated `NEXT_PUBLIC_TURN_URLS` list.
+
+See `PHASE-4-SETUP.md` for Firebase Web Push/VAPID and Firebase Admin setup. Merge the device-token rule from `FIRESTORE_PHASE4_RULES.txt` into your existing rules without removing permissions for other collections. The stricter call rule guidance is in `FIRESTORE_PHASE3_RULES.txt`; review and test it before publishing. Do not replace your entire live rules file.
+
+## Incoming-call limitations
+An installed PWA can receive an Android/Chrome push notification while backgrounded or closed, subject to notification permission, FCM delivery and OS battery settings. Notification actions can open Callio or decline a call. The user must open the app and tap Accept before microphone access and WebRTC setup. A PWA cannot guarantee the native Phone app's full-screen call UI or continuous ringtone while closed; that requires a native Android app using Android Telecom/ConnectionService integration.
