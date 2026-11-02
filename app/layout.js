@@ -7,7 +7,14 @@ export const metadata = {
   manifest: "/manifest.webmanifest",
   applicationName: "Callio",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Callio" },
-  icons: { icon: "/callio-icon.svg", apple: "/callio-icon.svg" }
+  icons: { icon: "/callio-icon.svg", apple: "/callio-icon-192.png" }
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0b0b10"
 };
 
 export default function RootLayout({ children }) {
