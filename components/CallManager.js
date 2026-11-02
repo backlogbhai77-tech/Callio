@@ -8,15 +8,22 @@ import {
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
 
+const configuredTurnUrls = (process.env.NEXT_PUBLIC_TURN_URLS || process.env.NEXT_PUBLIC_TURN_URL || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+
 const rtcConfig = {
   iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    ...(process.env.NEXT_PUBLIC_TURN_URL ? [{
-      urls: process.env.NEXT_PUBLIC_TURN_URL,
+    { urls: ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"] },
+    ...(configuredTurnUrls.length ? [{
+      urls: configuredTurnUrls,
       username: process.env.NEXT_PUBLIC_TURN_USERNAME || "",
       credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || ""
     }] : [])
-  ]
+  ],
+  bundlePolicy: "max-bundle",
+  rtcpMuxPolicy: "require"
 };
 
 export default function CallManager({ user, onToast }) {
@@ -35,6 +42,7 @@ export default function CallManager({ user, onToast }) {
   const startedAt = useRef(null);
   const finishedRef = useRef(false);
   const ringTimerRef = useRef(null);
+  const reconnectTimerRef = useRef(null);
   const ringtoneAudioRef = useRef(null);
   const audioUnlockedRef = useRef(false);
 
@@ -96,9 +104,10 @@ export default function CallManager({ user, onToast }) {
     if (ringtoneAudioRef.current) { ringtoneAudioRef.current.pause(); ringtoneAudioRef.current.currentTime = 0; }
   }, []);
 
-  const finishCall = useCallback(async (status = "ended") => {
+  const finishCall = useCallback(async (status = "ended", persistStatus = true) => {
     const activeCall = callRef.current;
     if (ringTimerRef.current) { clearTimeout(ringTimerRef.current); ringTimerRef.current = null; }
+    if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
     if (finishedRef.current) return;
     finishedRef.current = true;
     stopMedia();
@@ -109,7 +118,7 @@ export default function CallManager({ user, onToast }) {
     setOutputVolume(85);
     setSeconds(0);
     callRef.current = null;
-    if (activeCall?.id && db) {
+    if (persistStatus && activeCall?.id && db) {
       try {
         await updateDoc(doc(db, "calls", activeCall.id), {
           status,
@@ -127,18 +136,15 @@ export default function CallManager({ user, onToast }) {
     const stop = onSnapshot(collection(db, "calls", callId, collectionName), (snapshot) => {
       snapshot.docChanges().forEach(async (change) => {
         if (change.type !== "added") return;
+        const candidate = change.doc.data();
+        if (!candidate?.candidate) return;
         try {
-          const candidate = change.doc.data();
-          if (candidate?.candidate && peer.remoteDescription) {
-            await peer.addIceCandidate(candidate);
-          } else if (candidate?.candidate) {
-            const waitForRemote = setInterval(async () => {
-              if (peer.remoteDescription) {
-                clearInterval(waitForRemote);
-                try { await peer.addIceCandidate(candidate); } catch (error) { console.warn(error); }
-              }
-            }, 250);
-            setTimeout(() => clearInterval(waitForRemote), 15000);
+          // The listener is normally attached after setRemoteDescription. Keep a
+          // small queue as a safety net for slower mobile devices and renegotiation.
+          if (peer.remoteDescription) await peer.addIceCandidate(candidate);
+          else {
+            peer.__callioCandidateQueue = peer.__callioCandidateQueue || [];
+            peer.__callioCandidateQueue.push(candidate);
           }
         } catch (error) { console.warn("ICE candidate could not be added", error); }
       });
@@ -169,7 +175,18 @@ export default function CallManager({ user, onToast }) {
       } catch (error) { console.warn("Could not send ICE candidate", error); }
     };
     peer.onconnectionstatechange = () => {
-      if (["failed", "closed"].includes(peer.connectionState)) finishCall("failed");
+      if (peer.connectionState === "connected") {
+        if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+      } else if (peer.connectionState === "disconnected") {
+        // Mobile network hand-offs can briefly disconnect WebRTC. Allow a short
+        // recovery window instead of immediately ending a potentially recoverable call.
+        if (!reconnectTimerRef.current) reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          if (peerRef.current === peer && peer.connectionState !== "connected") finishCall("failed");
+        }, 12000);
+      } else if (["failed", "closed"].includes(peer.connectionState)) {
+        finishCall("failed");
+      }
     };
     return peer;
   }, [finishCall, onToast, outputVolume, soundEnabled]);
@@ -234,9 +251,9 @@ export default function CallManager({ user, onToast }) {
       const stopAnswer = onSnapshot(doc(db, "calls", callDoc.id), async (snapshot) => {
         const data = snapshot.data();
         if (!data) return;
-        if (data.status === "rejected" || data.status === "ended" || data.status === "missed") {
+        if (["rejected", "ended", "missed", "failed"].includes(data.status)) {
           onToast?.(data.status === "rejected" ? "Call declined." : "Call ended.");
-          finishCall(data.status);
+          finishCall(data.status, false);
           stopAnswer();
           return;
         }
@@ -269,6 +286,8 @@ export default function CallManager({ user, onToast }) {
     try {
       const peer = await preparePeer(incoming.id, "callee");
       await peer.setRemoteDescription(new RTCSessionDescription(incoming.offer));
+      for (const candidate of peer.__callioCandidateQueue || []) await peer.addIceCandidate(candidate);
+      peer.__callioCandidateQueue = [];
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
       await updateDoc(doc(db, "calls", incoming.id), {
@@ -283,7 +302,7 @@ export default function CallManager({ user, onToast }) {
       const stopCallStatus = onSnapshot(doc(db, "calls", incoming.id), (snapshot) => {
         const data = snapshot.data();
         if (data && ["ended", "missed", "rejected", "failed"].includes(data.status) && callRef.current?.id === incoming.id) {
-          finishCall(data.status);
+          finishCall(data.status, false);
         }
       }, (error) => console.warn("Call status listener", error));
       candidateStops.current.push(stopCallStatus);
@@ -300,6 +319,22 @@ export default function CallManager({ user, onToast }) {
     catch (error) { onToast?.(error.message); }
     setIncoming(null);
   }, [incoming, onToast]);
+
+  // A notification action opens Callio with ?call=<id>&action=answer|reject.
+  // Answer still requires the user to tap Accept in the app so microphone
+  // permission and WebRTC setup happen in a visible, user-controlled context.
+  useEffect(() => {
+    if (!incoming || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const requestedCall = params.get("call");
+    const action = params.get("action");
+    if (requestedCall !== incoming.id || !action) return;
+    if (action === "reject") rejectCall();
+    params.delete("call");
+    params.delete("action");
+    const queryString = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${queryString ? `?${queryString}` : ""}${window.location.hash}`);
+  }, [incoming, rejectCall]);
 
   useEffect(() => {
     if (!user?.uid || !db) return;
@@ -344,7 +379,7 @@ export default function CallManager({ user, onToast }) {
 
   return <>
     <audio ref={audioRef} autoPlay playsInline />
-    <audio ref={ringtoneAudioRef} src="/sounds/callio-ringtone.wav" preload="auto" loop />
+    <audio ref={ringtoneAudioRef} src="/callio-ringtone.wav" preload="auto" loop />
     {incoming && !call && <div className="callio-call-backdrop"><div className="callio-call-card">
       <div className="callio-call-pulse"><Phone size={25}/></div><span className="callio-call-kicker">INCOMING AUDIO CALL</span>
       <h2>{incoming.callerName || "Callio friend"}</h2><p>is calling you</p>
